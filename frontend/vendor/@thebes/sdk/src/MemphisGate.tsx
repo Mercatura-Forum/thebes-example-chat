@@ -47,7 +47,13 @@ export function SignOutChip({ className = '' }: { className?: string }) {
     )
   }
 
-  const submit = () => { auth.signIn(name.trim() || 'Guest').catch(() => { /* surfaced by auth.error */ }) }
+  // Memphis handles look like  <stem>.thebes  — we append ".thebes" so a visitor
+  // only types the stem (3–32 chars, a–z 0–9 -). No bare fallback: an invalid
+  // stem keeps the button disabled instead of failing with a cryptic error.
+  const stem = name.trim().toLowerCase().replace(/\.thebes$/, '')
+  const stemOk = stem.length >= 3 && stem.length <= 32 && /^[a-z0-9-]+$/.test(stem) && !stem.startsWith('-') && !stem.endsWith('-')
+  const handle = `${stem}.thebes`
+  const submit = () => { if (stemOk && !auth.busy) auth.signIn(handle).catch(() => { /* surfaced by auth.error */ }) }
 
   if (!open) {
     return (
@@ -59,16 +65,21 @@ export function SignOutChip({ className = '' }: { className?: string }) {
   }
 
   return (
-    <span className={`inline-flex items-center gap-1.5 text-xs ${className}`}>
-      <input
-        className="w-28 rounded-md border border-black/10 bg-black/[0.03] px-2 py-1 outline-none focus:border-black/30"
-        placeholder="Your name" value={name} autoFocus
-        onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()}
-      />
-      <button className="rounded-md px-2 py-1 font-medium text-white disabled:opacity-50"
-              style={{ background: 'var(--color-accent)' }} onClick={submit} disabled={auth.busy}>
-        {auth.busy ? 'Signing in…' : 'Sign in with passkey'}
-      </button>
+    <span className={`inline-flex flex-col items-stretch gap-1 text-xs ${className}`}>
+      <span className="inline-flex items-center gap-2">
+        <input
+          className="w-28 rounded-md border border-black/10 bg-black/[0.03] px-2 py-1 outline-none focus:border-black/30"
+          placeholder="yourname" value={name} autoFocus aria-label="Thebes handle"
+          onChange={(e) => setName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()}
+        />
+        <button className="rounded-md px-2 py-1 font-medium text-white disabled:opacity-50"
+                style={{ background: 'var(--color-accent)' }} onClick={submit} disabled={auth.busy || !stemOk}>
+          {auth.busy ? 'Signing in…' : 'Sign in with passkey'}
+        </button>
+      </span>
+      <span style={{ fontSize: '11px', opacity: 0.7 }}>
+        {stem ? <>→ becomes <b>{handle}</b></> : 'pick a handle — we add .thebes'} · 3–32 · a–z 0–9 -
+      </span>
       {auth.error && <span className="max-w-[10rem] truncate text-red-600" title={auth.error}>{auth.error}</span>}
     </span>
   )
