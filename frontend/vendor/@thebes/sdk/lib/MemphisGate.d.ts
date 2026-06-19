@@ -15,8 +15,8 @@ import { type ReactNode } from 'react';
 import { type MemphisAuth } from './useMemphis.js';
 /** The signed-in Memphis session + sign-out. Throws if used outside the gate. */
 export declare function useAuth(): MemphisAuth;
-export declare function MemphisGate({ appName, tagline, children }: {
-    appName: string;
+export declare function MemphisGate({ children }: {
+    appName?: string;
     tagline?: string;
     children: ReactNode;
 }): import("react").JSX.Element;
