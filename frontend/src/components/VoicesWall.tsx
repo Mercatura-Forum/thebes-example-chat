@@ -47,8 +47,11 @@ export function VoicesWall({
   const slips = useMemo<Slip[]>(() => {
     const rows = messages.slice(-28)
     const rand = mulberry(rows.length * 977 + Number(rooms.length) * 131 + 7)
+    // Canvas text has no emoji fallback font — strip pictographs so slips
+    // never render tofu boxes.
+    const plain = (t: string) => t.replace(/[\p{Extended_Pictographic}️‍]/gu, '').replace(/\s+/g, ' ').trim()
     return rows.map((m, i) => ({
-      text: m.deleted ? '— removed · the record remains —' : m.text.length > 64 ? m.text.slice(0, 61) + '…' : m.text,
+      text: m.deleted ? '— removed · the record remains —' : (() => { const p = plain(m.text); return p.length > 64 ? p.slice(0, 61) + '…' : p })(),
       name: m.deleted ? '' : m.name,
       ghost: m.deleted,
       x: 0.08 + rand() * 0.84,
