@@ -16,12 +16,16 @@ export const CHAT_CID: number =
 export const MEDIA_CID: number =
   (typeof window !== 'undefined' && window.MEDIA_CID) || 258560679726455
 
-/** Short relative time ("just now", "3m", "2h", "Apr 4") from a ns timestamp. */
+import { wallDate } from './chainTime'
+
+/** Short relative time ("just now", "3m", "2h", "Apr 4") from a CHAIN ns
+ *  timestamp — converted through the calibrated chain clock (the chain counts
+ *  ns since genesis, not the epoch). */
 export function relTime(ns: bigint): string {
-  const ms = Number(ns / 1_000_000n)
-  const diff = Date.now() - ms
+  const d = wallDate(ns)
+  const diff = Date.now() - d.getTime()
   if (diff < 60_000) return 'just now'
   if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m`
   if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h`
-  return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
 }

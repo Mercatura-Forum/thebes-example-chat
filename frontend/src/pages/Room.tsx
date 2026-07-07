@@ -1,114 +1,152 @@
-import { useMemo, useRef, useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { useQuery, useUpdate } from '@thebes/sdk'
-import { identity } from '@thebes/sdk'
-import { relTime } from '../lib/config'
+import { useEffect, useRef, useState } from 'react'
+import { Link, useParams } from 'react-router-dom'
+import { useQuery } from '@thebes/sdk'
 import {
-  CHAT_CID, M, decodeRoster, decodeMessages, rosterArgs, recentArgs, post, seedDemo,
-  type RosterEntry, type Message,
+  CHAT_CID, M, EMOJI, decodeRooms, decodeMessages, messagesArgs,
+  postTo, react, deleteMessage, amAdmin,
+  type RoomRow, type MessageRow,
 } from '../lib/chat-api'
+import { relTime } from '../lib/config'
 import { Avatar, Button, Spinner, EmptyState, ErrorNote } from '../components/ui'
 
+const COOLDOWN_MS = 3000
+
 export function Room() {
-  const me = identity()
-  const roster = useQuery<RosterEntry[]>(CHAT_CID, M.roster, rosterArgs(), decodeRoster)
-  const feed = useQuery<Message[]>(CHAT_CID, M.recent, recentArgs(), decodeMessages)
-  const { error: writeErr } = useUpdate()
+  const { id } = useParams()
+  const roomId = BigInt(id ?? '1')
+  const rooms = useQuery<RoomRow[]>(CHAT_CID, M.rooms, undefined, decodeRooms)
+  const feed = useQuery<MessageRow[]>(CHAT_CID, M.messages, messagesArgs(roomId, 200), decodeMessages, [id])
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
-  const [seeding, setSeeding] = useState(false)
-  const [seedErr, setSeedErr] = useState<string>()
+  const [cooledAt, setCooledAt] = useState(0) // wall ms when the next post is allowed
+  const [nowTick, setNowTick] = useState(Date.now())
+  const [mod, setMod] = useState(false)
+  const [err, setErr] = useState<string>()
   const bottomRef = useRef<HTMLDivElement>(null)
+  const grew = useRef(0)
 
-  const byPrincipal = useMemo(() => {
-    const m = new Map<string, RosterEntry>()
-    ;(roster.data ?? []).forEach((r) => m.set(r.principal, r))
-    return m
-  }, [roster.data])
+  useEffect(() => { amAdmin().then(setMod).catch(() => {}) }, [])
+
+  // Soft live feel: refetch the feed every 8s while visible.
+  useEffect(() => {
+    const t = setInterval(() => { if (!document.hidden) feed.refetch() }, 8000)
+    return () => clearInterval(t)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id])
+
+  // Tick for the breathing ring.
+  useEffect(() => {
+    if (cooledAt <= Date.now()) return
+    const t = setInterval(() => setNowTick(Date.now()), 100)
+    return () => clearInterval(t)
+  }, [cooledAt])
 
   const messages = feed.data ?? []
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    if (messages.length !== grew.current) {
+      grew.current = messages.length
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' })
+    }
   }, [messages.length])
+
+  const room = (rooms.data ?? []).find((r) => r.id === roomId)
+  const breathing = Math.max(0, cooledAt - nowTick)
 
   async function send() {
     const text = draft.trim()
-    if (!text) return
-    setSending(true)
+    if (!text || sending) return
+    setSending(true); setErr(undefined)
     try {
-      await post(text)
+      await postTo(roomId, text)
       setDraft('')
+      setCooledAt(Date.now() + COOLDOWN_MS)
+      setNowTick(Date.now())
       feed.refetch()
-    } catch {
-      /* surfaced via writeErr */
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
     } finally {
       setSending(false)
     }
   }
 
-  async function seed() {
-    setSeeding(true); setSeedErr(undefined)
-    try { await seedDemo(); feed.refetch(); roster.refetch() }
-    catch (e) { setSeedErr(e instanceof Error ? e.message : String(e)) }
-    finally { setSeeding(false) }
+  async function toggleReact(m: MessageRow, emoji: string) {
+    setErr(undefined)
+    try { await react(roomId, m.id, emoji); feed.refetch() }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
+  }
+
+  async function remove(m: MessageRow) {
+    if (!window.confirm('Remove this message? A tombstone will remain — the record that something was said is never erased.')) return
+    setErr(undefined)
+    try { await deleteMessage(roomId, m.id); feed.refetch() }
+    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
   }
 
   return (
-    <div className="grid gap-5 md:grid-cols-[16rem_1fr]">
-      {/* Roster pane */}
-      <aside className="hidden md:block">
-        <h2 className="px-1 text-xs font-semibold uppercase tracking-[0.18em] text-ink-soft">
-          Members{roster.data ? ` · ${roster.data.length}` : ''}
-        </h2>
-        <ul className="mt-3 space-y-1">
-          {(roster.data ?? []).map((r) => (
-            <li key={r.principal} className="flex items-center gap-2.5 rounded-xl px-2 py-1.5 hover:bg-surface">
-              <Avatar path={r.avatarPath} name={r.displayName} size={34} live />
-              <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                {r.displayName}
-                {r.principal === me && <span className="ml-1 text-[var(--color-you)]">· you</span>}
-              </span>
-            </li>
-          ))}
-          {roster.data?.length === 0 && (
-            <li className="px-2 text-sm text-ink-soft">No one's here yet.</li>
-          )}
-        </ul>
-      </aside>
+    <div>
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <Link to="/" className="text-sm text-[var(--color-you-ink)] hover:underline">← Salon</Link>
+          <h1 className="font-display mt-1 text-2xl font-extrabold">{room?.name ?? `Room ${roomId}`}</h1>
+          {room && <p className="text-sm text-ink-soft">{room.topic}</p>}
+        </div>
+        {room && (
+          <p className="text-[11px] text-ink-soft nums" data-testid="room-books">
+            <b className="text-ink">{room.keptMessages.toString()}</b> kept
+            {room.totalEverSent > room.keptMessages && <> + {(room.totalEverSent - room.keptMessages).toString()} trimmed</>}
+            {' '}= {room.totalEverSent.toString()} ever said
+          </p>
+        )}
+      </div>
 
-      {/* Feed + composer */}
-      <section className="flex min-h-[60vh] flex-col rounded-2xl border border-[var(--color-line)] bg-surface">
+      <section className="mt-4 flex min-h-[62vh] flex-col rounded-2xl border border-[var(--color-line)] bg-surface">
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
-          {feed.loading ? (
+          {feed.loading && messages.length === 0 ? (
             <Spinner label="Loading the room" />
           ) : feed.error ? (
             <ErrorNote message={feed.error} />
           ) : messages.length === 0 ? (
-            <div>
-              <EmptyState
-                title="The room is quiet"
-                hint="Load a demo conversation to see it live, or set a name + avatar in Profile and be the first to post."
-                action={
-                  <div className="flex flex-wrap items-center justify-center gap-3">
-                    <Button onClick={seed} disabled={seeding}>{seeding ? 'Loading…' : 'Load demo data'}</Button>
-                    <Link to="/me"><Button variant="ghost">Set up profile</Button></Link>
-                  </div>
-                }
-              />
-              {seedErr && <div className="mx-auto mt-4 max-w-md"><ErrorNote message={seedErr} /></div>}
-            </div>
+            <EmptyState title="This room is quiet" hint="Say the first thing — it goes on the books." />
           ) : (
-            messages.map((m, i) => {
-              const mine = m.sender === me
-              const who = byPrincipal.get(m.sender)
-              const name = who?.displayName ?? `${m.sender.slice(0, 6)}…`
+            messages.map((m) => {
+              if (m.deleted) {
+                return (
+                  <p key={m.id.toString()} className="tombstone" data-testid="tombstone">
+                    — removed · the record remains · #{m.id.toString()} —
+                  </p>
+                )
+              }
+              const reactions = m.reactions ? m.reactions.split('|').map((r) => { const [e, n] = r.split(':'); return { e, n } }) : []
+              const mineSet = new Set(m.myReactions ? m.myReactions.split('|') : [])
               return (
-                <div key={i} className={`flex items-end gap-2 ${mine ? 'flex-row-reverse' : ''}`}>
-                  {!mine && <Avatar path={who?.avatarPath ?? ''} name={name} size={30} />}
-                  <div className={`flex flex-col ${mine ? 'items-end' : 'items-start'}`}>
-                    {!mine && <span className="mb-0.5 px-1 text-xs font-medium text-ink-soft">{name}</span>}
-                    <div className={`bubble ${mine ? 'bubble-you' : 'bubble-them'}`}>{m.text}</div>
-                    <span className="mt-0.5 px-1 text-[11px] text-ink-soft nums">{relTime(m.timestamp)}</span>
+                <div key={m.id.toString()} className={`group flex items-end gap-2 ${m.mine ? 'flex-row-reverse' : ''}`}>
+                  {!m.mine && <Avatar path={m.avatarPath} name={m.name} size={30} />}
+                  <div className={`flex max-w-full flex-col ${m.mine ? 'items-end' : 'items-start'}`}>
+                    <span className="mb-0.5 px-1 text-xs font-medium text-ink-soft">
+                      {!m.mine && <>{m.name} · </>}{relTime(m.timestamp)}
+                    </span>
+                    <div className={`bubble ${m.mine ? 'bubble-you' : 'bubble-them'}`}>{m.text}</div>
+                    <span className={`mt-1 flex items-center gap-1 px-1 ${m.mine ? 'flex-row-reverse' : ''}`}>
+                      {reactions.map(({ e, n }) => (
+                        <button key={e} onClick={() => toggleReact(m, e)}
+                          className={`rounded-full px-1.5 py-0.5 text-[11px] nums transition ${mineSet.has(e) ? 'bg-[var(--color-you)]/15 ring-1 ring-[var(--color-you)]/40' : 'bg-[var(--color-them)]'}`}>
+                          {e} {n}
+                        </button>
+                      ))}
+                      <span className="hidden gap-0.5 group-hover:flex">
+                        {EMOJI.filter((e) => !reactions.some((r) => r.e === e)).map((e) => (
+                          <button key={e} onClick={() => toggleReact(m, e)}
+                            className="rounded-full px-1 py-0.5 text-[11px] opacity-40 transition hover:opacity-100" aria-label={`React ${e}`}>
+                            {e}
+                          </button>
+                        ))}
+                        {(m.mine || mod) && (
+                          <button onClick={() => remove(m)}
+                            className="rounded-full px-1.5 py-0.5 text-[11px] text-ink-soft opacity-40 transition hover:opacity-100 hover:text-red-500"
+                            aria-label="Remove message">✕</button>
+                        )}
+                      </span>
+                    </span>
                   </div>
                 </div>
               )
@@ -117,20 +155,40 @@ export function Room() {
           <div ref={bottomRef} />
         </div>
 
-        <form
-          className="flex items-center gap-2 border-t border-[var(--color-line)] p-3"
-          onSubmit={(e) => { e.preventDefault(); send() }}
-        >
-          <input
-            className="flex-1 rounded-xl border border-[var(--color-line)] bg-paper px-3 py-2 text-sm outline-none focus:border-[var(--color-you)]"
-            placeholder="Message the room…"
-            value={draft}
-            onChange={(e) => setDraft(e.target.value)}
-            maxLength={500}
-          />
-          <Button type="submit" disabled={sending || !draft.trim()}>{sending ? 'Sending…' : 'Send'}</Button>
-        </form>
-        {writeErr && <div className="px-3 pb-3"><ErrorNote message={writeErr} /></div>}
+        {/* ── The breathing composer: the cooldown law, made visible ── */}
+        <div className="border-t border-[var(--color-line)] p-3">
+          {err && <div className="mb-2"><ErrorNote message={err} /></div>}
+          <div className="flex items-center gap-2">
+            <input
+              className="min-w-0 flex-1 rounded-xl border border-[var(--color-line)] bg-[var(--color-paper)] px-3.5 py-2.5 text-sm outline-none focus:border-[var(--color-you)]"
+              placeholder={breathing > 0 ? 'The room breathes…' : 'Say something — it goes on the books'}
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && send()}
+              maxLength={2000}
+              aria-label="Message"
+            />
+            <span className="relative inline-block">
+              {breathing > 0 && (
+                <svg className="pointer-events-none absolute -inset-1" viewBox="0 0 44 44" data-testid="breath-ring">
+                  <circle cx="22" cy="22" r="20" fill="none" stroke="var(--color-you)" strokeOpacity="0.25" strokeWidth="2.5" />
+                  <circle cx="22" cy="22" r="20" fill="none" stroke="var(--color-you)" strokeWidth="2.5" strokeLinecap="round"
+                    strokeDasharray={`${(breathing / COOLDOWN_MS) * 125.6} 125.6`}
+                    transform="rotate(-90 22 22)" />
+                </svg>
+              )}
+              {/* Deliberately NOT disabled during the breath — the cooldown is
+                  the contract's law, and the contract's own rejection is the
+                  demonstration. The ring is guidance, not the guard. */}
+              <Button onClick={send} disabled={sending || !draft.trim()} aria-label="Send">
+                {sending ? '…' : breathing > 0 ? `${Math.ceil(breathing / 1000)}` : 'Send'}
+              </Button>
+            </span>
+          </div>
+          <p className="mt-1.5 px-1 text-[11px] text-ink-soft">
+            The contract enforces a 3-second breath between messages — not the client. Try to beat it; the chain says no.
+          </p>
+        </div>
       </section>
     </div>
   )

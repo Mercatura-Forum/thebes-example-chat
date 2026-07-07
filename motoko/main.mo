@@ -145,9 +145,17 @@ persistent actor ChatRoom {
     id;
   };
 
+  func requireNotBanned(p : Principal) {
+    switch (Map.get(banned, Principal.compare, p)) {
+      case (?true) { Runtime.trap("You are banned from this salon.") };
+      case _ {};
+    };
+  };
+
   public shared(msg) func createRoom(name : Text, topic : Text) : async Nat {
     Admin.requireNotPaused(admin);
     if (Principal.isAnonymous(msg.caller)) Runtime.trap("Sign in first.");
+    requireNotBanned(msg.caller);
     if (Text.size(name) == 0 or Text.size(name) > 40) Runtime.trap("Room names are 1–40 characters.");
     if (Users.get(users, msg.caller) == null) Runtime.trap("Register a display name first.");
     ignore beat(msg.caller);
@@ -158,10 +166,7 @@ persistent actor ChatRoom {
 
   func requireCanPost(sender : Principal) {
     if (Principal.isAnonymous(sender)) Runtime.trap("Sign in first.");
-    switch (Map.get(banned, Principal.compare, sender)) {
-      case (?true) { Runtime.trap("You are banned from this salon.") };
-      case _ {};
-    };
+    requireNotBanned(sender);
     if (Users.get(users, sender) == null) Runtime.trap("Register a display name first.");
     switch (Map.get(lastPostAt, Principal.compare, sender)) {
       case (?t) {
@@ -276,6 +281,7 @@ persistent actor ChatRoom {
   public shared(msg) func react(roomId : Nat, messageId : Nat, emoji : Text) : async () {
     Admin.requireNotPaused(admin);
     if (Principal.isAnonymous(msg.caller)) Runtime.trap("Sign in first.");
+    requireNotBanned(msg.caller);
     if (Array.find<Text>(EMOJI, func(e) { e == emoji }) == null) Runtime.trap("That emoji isn't in the set.");
     let l = msgsOf(roomId);
     var found = false;
