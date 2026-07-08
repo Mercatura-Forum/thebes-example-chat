@@ -1,10 +1,17 @@
 # thebes-example-chat
 
 An on-chain social room built on [Thebes Protocol](https://github.com/Mercatura-Forum/Thebes-Protocol-):
-a Motoko backend that holds messages, member profiles, and the roster, and a React
-frontend served as certified assets. It demonstrates the full shape of a Thebes
-application — passkey sign-in, controller-gated admin, paginated reads, and
-threshold-signed on-chain state — in one self-contained example.
+a Motoko backend that holds rooms, messages, member profiles and the roster, and
+a React frontend served as certified assets.
+
+The property this example proves: **an accountable conversation.** Every kept
+message is attributed and strictly ordered; deletion leaves a tombstone (the
+record that something was said is never quietly erased); trimming stays on the
+books (kept + trimmed = everything ever sent); and the anti-spam cooldown is
+enforced by the contract, not the client. The **public oracle**
+(`invariantReportView`) recomputes those laws for every room on every read.
+
+Live demo: <https://memphis.mercaturaforum.com/_/raw/186131445741167/index.html>
 
 ## Architecture
 
