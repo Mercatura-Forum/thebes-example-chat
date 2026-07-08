@@ -24,6 +24,20 @@
   --font-sans: 'Plus Jakarta Sans Variable', ui-sans-serif, system-ui, sans-serif;
 }
 
+/* Dusk salon: the same plum family after dark. Toggled by <html class="dark">. */
+html.dark {
+  --color-ink: #ece6f6;
+  --color-ink-soft: #a099b1;
+  --color-paper: #17121f;
+  --color-surface: #201a2c;
+  --color-line: #322a42;
+  --color-you: #a98fff;
+  --color-you-ink: #c9b8ff;
+  --color-them: #2c2440;
+  --color-live: #2fd68b;
+  color-scheme: dark;
+}
+
 html, body, #root { height: 100%; }
 body {
   margin: 0;
@@ -31,7 +45,35 @@ body {
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+  transition: background 0.25s ease, color 0.25s ease;
 }
+
+/* ── The hero: the live conversation drifts behind the headline ── */
+.hero {
+  position: relative;
+  border-radius: 24px;
+  border: 1px solid var(--color-line);
+  min-height: 380px;
+  background:
+    radial-gradient(900px 420px at 80% 20%, color-mix(in oklab, var(--color-you) 10%, transparent), transparent 60%),
+    linear-gradient(165deg, var(--color-surface), color-mix(in oklab, var(--color-you) 4%, var(--color-surface)));
+}
+.hero-kicker { display: inline-flex; align-items: center; gap: 0.45rem;
+  font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--color-you-ink); }
+.hero-kicker::before { content: ''; display: inline-block; width: 22px; height: 1.5px;
+  background: var(--color-you); }
+
+/* Room plaques on the salon page. */
+.plaque { display: block; border-radius: 18px; border: 1px solid var(--color-line);
+  background: var(--color-surface); padding: 1rem 1.15rem;
+  transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease; }
+.plaque:hover { transform: translateY(-2px); border-color: color-mix(in oklab, var(--color-you) 45%, var(--color-line));
+  box-shadow: 0 14px 30px -18px color-mix(in oklab, var(--color-you) 55%, transparent); }
+
+/* Tombstones: the record remains, engraved. */
+.tombstone { text-align: center; font-size: 11px; letter-spacing: 0.08em;
+  color: var(--color-ink-soft); opacity: 0.75; font-style: italic; padding: 0.15rem 0; }
 
 .font-display { font-family: var(--font-display); letter-spacing: -0.02em; }
 .nums { font-variant-numeric: tabular-nums; }
