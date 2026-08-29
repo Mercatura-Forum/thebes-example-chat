@@ -1,6 +1,6 @@
 # thebes-example-chat
 
-An on-chain social room built on [Thebes Protocol](https://github.com/Mercatura-Forum/Thebes-Protocol-):
+An on-chain social room built on [Thebes Protocol](https://thebesprotocol.com):
 a Motoko backend that holds rooms, messages, member profiles and the roster, and
 a React frontend served as certified assets.
 
