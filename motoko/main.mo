@@ -222,17 +222,36 @@ persistent actor ChatRoom {
   // Memphis session gate (lib/MemphisAuth): postAs lets a signed-in Memphis
   // user post under their stable per-app principal instead of the transport
   // sender. origin/version must match the client's derivation parameters.
+  // The PSEUDONYM NAMESPACE. It decides every user's principal, so it is frozen
+  // for the life of this app — changing it, including to a new domain, orphans
+  // every existing account. It happens to read like a URL because that is where
+  // this example was first served; it is a label, and it stays this label.
   var gate = MemphisAuth.initFromCid(
     921,
     "https://memphis.mercaturaforum.com",
     1,
   );
 
+  // The WEB ORIGIN this app is served from — a different thing from the
+  // namespace above, and the one that changes when the app moves to its own
+  // domain. Memphis compares it byte-exactly against the origin it minted the
+  // token for, so a trailing slash or a differing port is a mismatch.
+  // Moving this app to its own domain is this line, and only this line.
+  let AUDIENCE : Text = "https://memphis.mercaturaforum.com";
+
   public shared(_msg) func postAs(token : Blob, text : Text) : async Result.Result<(), Text> {
     Admin.requireNotPaused(admin);
     if (Text.size(text) == 0) return #err("empty message");
-    switch (await MemphisAuth.verify(gate, token)) {
+    // await*, not await: verifyWithAudience is async*. A plain await on a
+    // module-level async helper that calls another contract replies with the
+    // INNER value instead of this method's own return.
+    switch (await* MemphisAuth.verifyWithAudience(gate, token, AUDIENCE)) {
       case (#err(#Expired)) { #err("Memphis session expired") };
+      case (#err(#Memphis(#Unauthorized))) {
+        // The single most common misconfiguration, so it gets its own message:
+        // the token is real, it was just minted for a different site.
+        #err("That sign-in was issued for another site. Sign in again here.");
+      };
       case (#err(#Memphis(_))) { #err("Memphis rejected the session token") };
       case (#ok(id)) {
         requireCanPost(id.principal);
