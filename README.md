@@ -34,6 +34,34 @@ Both halves are self-contained: the repository builds with no external Git or Mo
 toolkit pins. The frontend asset-canister wasm is the one artifact fetched at
 deploy time (see [Deploy](#deploy)).
 
+## Identity
+
+Sign-in is [Memphis](https://github.com/Mercatura-Forum/thebes-sdk/blob/main/docs/memphis.md), contract **921**. Two strings decide everything here
+and they are **not** the same value:
+
+| | What it is | Changing it |
+| --- | --- | --- |
+| `origin` (on the gate) | The **pseudonym namespace**. It decides every user's principal. | Orphans every existing account. Frozen for the life of this app — including when the app moves to a new domain. |
+| `AUDIENCE` | The **web origin this app is served from**. Memphis compares it byte-exactly against the origin the token was minted for. | Harmless. **Moving this app to its own domain is this one line.** |
+
+The backend verifies with:
+
+```motoko
+switch (await* MemphisAuth.verifyWithAudience(gate, token, AUDIENCE)) { ... }
+```
+
+`await*`, not `await`. `verifyWithAudience` is `async*`, and a plain `await` on
+a module-level `async` helper that calls another contract replies with the
+*inner* value instead of this method's own return — which shows up as a
+client-side Candid decode error naming a field the method never declared.
+
+**On your own domain**, the passkey ceremony cannot run in the page: a page may
+only claim a WebAuthn RP ID that is a registrable-domain suffix of its own
+origin. Use `<MemphisConnectGate>` from `@thebes/sdk`, which runs the ceremony
+at the Memphis origin and returns a token minted for yours.
+
+Full guide, both halves: **[`docs/memphis.md`](https://github.com/Mercatura-Forum/thebes-sdk/blob/main/docs/memphis.md)**.
+
 ## Backend interface (selected)
 
 | Method | Kind | Purpose |
