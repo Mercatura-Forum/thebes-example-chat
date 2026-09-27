@@ -11,10 +11,10 @@ declare global {
 }
 
 export const CHAT_CID: number =
-  (typeof window !== 'undefined' && window.CHAT_CID) || 191118365568631
+  (typeof window !== 'undefined' && window.CHAT_CID) || 7572702803352
 
 export const MEDIA_CID: number =
-  (typeof window !== 'undefined' && window.MEDIA_CID) || 258560679726455
+  (typeof window !== 'undefined' && window.MEDIA_CID) || 50786597820762
 
 import { wallDate } from './chainTime'
 
