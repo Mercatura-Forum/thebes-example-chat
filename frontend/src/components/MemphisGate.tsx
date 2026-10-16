@@ -7,7 +7,7 @@
  * Memphis passkey sign-in is offered in the header for a persistent identity.
  */
 import { createContext, useContext, useState, type ReactNode } from 'react'
-import { useMemphis, type MemphisAuth } from '@thebes/sdk'
+import { useMemphis, RecoveryPhrasePanel, type MemphisAuth } from '@thebes/sdk'
 import { Button, ErrorNote } from './ui'
 
 const AuthCtx = createContext<MemphisAuth | null>(null)
@@ -18,10 +18,22 @@ export function useAuth(): MemphisAuth {
   return v
 }
 
-/** Open demo: always render the app. Sign-in is on demand via SignOutChip. */
+/** Open demo: always render the app. Sign-in is on demand via SignOutChip.
+ *
+ *  The phrase panel is rendered HERE, at the gate, not in the chip: creating an
+ *  identity needs three factors (INV-MEM-1), and useMemphis() suspends the
+ *  ceremony until confirmPhrase() resolves. Without this overlay the promise
+ *  never settles and signup sits at "Signing in…" forever — which is exactly
+ *  what this local gate did until it was fixed. It takes `auth` explicitly
+ *  because this file provides its own context, not the SDK's. */
 export function MemphisGate({ children }: { appName?: string; tagline?: string; children: ReactNode }) {
   const auth = useMemphis()
-  return <AuthCtx.Provider value={auth}>{children}</AuthCtx.Provider>
+  return (
+    <AuthCtx.Provider value={auth}>
+      {children}
+      <RecoveryPhrasePanel auth={auth} />
+    </AuthCtx.Provider>
+  )
 }
 
 export function SignOutChip({ className = '' }: { className?: string }) {
